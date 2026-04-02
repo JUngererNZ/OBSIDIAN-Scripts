@@ -9,6 +9,9 @@ Each file contains:
 - FML shipping file reference
 - BARTRAC customer order reference
 
+This is totally a vibe coded a filing system so that I could keep ahead if what shipments are on the go.
+Not out of boredom, but out of showing prospectives that I too can vibe code with a AI platform and have conversations on getting to a solution for a particular in-house process/task. ;)
+
 ## Data Sources
 
 ### Active Shipments

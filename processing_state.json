@@ -308,5 +308,56 @@
     "fml_ref": "2602DSI2779",
     "folder_location": "C:\\Users\\Jason\\Obsidian\\SHIPPING\\BA3101\\2602DSI2779 - BA3101 - CAT18-15A - KCC - 21-03",
     "last_processed": "2026-04-02T13:07:37"
+  },
+  "BA3073_2601DSI2769": {
+    "status_history": [
+      {
+        "status": "\ud83d\udfe1 In Progress",
+        "timestamp": "2026-04-02T13:28:23"
+      }
+    ],
+    "file_hash": "59d9e71a5f7e01d74537aa8b0e96ca42",
+    "file_status": "\ud83d\udfe1 In Progress",
+    "last_processed": "2026-04-02T13:28:23",
+    "emails_processed": [
+      "2601DSI2758BA307330743077307830793080308130823083310231033104DRC ECO LEVY APPLICATION12 X CATERPILLAR GENSETSLINK 1DRC-006334-RiaanK-2026-04-01-0818.md"
+    ],
+    "bartrac_ref": "BA3073",
+    "fml_ref": "2601DSI2769",
+    "folder_location": "C:\\Users\\Jason\\Obsidian\\SHIPPING\\BA3073\\2601DSI2769 - 8 X CAT GENSETS - CE"
+  },
+  "BA3069_2601DSI2766": {
+    "status_history": [
+      {
+        "status": "\ud83d\udfe1 In Progress",
+        "timestamp": "2026-04-02T13:28:23"
+      }
+    ],
+    "file_hash": "762a65569b3b44a7a015612a47fbf619",
+    "file_status": "\ud83d\udfe1 In Progress",
+    "last_processed": "2026-04-02T13:28:23",
+    "emails_processed": [
+      "2601DSI2759BA30693070307130723075307631063112311331163075DRC ECO LEVY APPLICATION11 X CATERPILLAR GENSETSLINK 2DRC-006336-RiaanK-2026-04-01-0818.md"
+    ],
+    "bartrac_ref": "BA3069",
+    "fml_ref": "2601DSI2766",
+    "folder_location": "C:\\Users\\Jason\\Obsidian\\SHIPPING\\BA3069\\2601DSI2766 - 10 GENSETS - CE"
+  },
+  "BA3053_2601DSI2763": {
+    "status_history": [
+      {
+        "status": "\ud83d\udfe1 In Progress",
+        "timestamp": "2026-04-02T13:28:23"
+      }
+    ],
+    "file_hash": "58ba52f7561cc1b760fa21e3a584cc63",
+    "file_status": "\ud83d\udfe1 In Progress",
+    "last_processed": "2026-04-02T13:28:23",
+    "emails_processed": [
+      "2601DSI2763BA305330543055305630623063311931203122DRC ECO LEVY APPLICATION9 X CATERPILLAR GENSETSLINK 3DRC-006337-RiaanK-2026-04-01-0818.md"
+    ],
+    "bartrac_ref": "BA3053",
+    "fml_ref": "2601DSI2763",
+    "folder_location": "C:\\Users\\Jason\\Obsidian\\SHIPPING\\BA3053\\2601DSI2763 - 4 X CAT DE850E0 GENSETS - CE"
   }
 }

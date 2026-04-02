@@ -19,6 +19,74 @@ from typing import Dict, List, Optional, Tuple
 
 import config
 
+STATUS_LABELS = {
+    'completed': '🟢 Completed',
+    'in_progress': '🟡 In Progress',
+    'action_required': '🔴 Action Required',
+    'na': '⚪ N/A',
+}
+
+STATUS_PATTERNS = {
+    'action_required': [
+        r'\baction required\b',
+        r'\burgent\b',
+        r'\bdelay(?:ed)?\b',
+        r'\bissue\b',
+        r'\bproblem\b',
+        r'\bblocked\b',
+        r'\bhold\b',
+        r'\bneeds.*action\b',
+        r'\battention\b',
+        r'\bstop\b',
+        r'\bunresolved\b',
+    ],
+    'completed': [
+        r'\bcompleted\b',
+        r'\bconfirmed\b',
+        r'\breleased\b',
+        r'\bdelivered\b',
+        r'\bclosed\b',
+        r'\bresolved\b',
+        r'\bcleared\b',
+        r'\bfinalized\b',
+        r'\bdone\b',
+        r'\bready\b',
+        r'\bimproved\b',
+        r'\bapproved\b',
+    ],
+    'in_progress': [
+        r'\bin progress\b',
+        r'\bpending\b',
+        r'\bexpected\b',
+        r'\bscheduled\b',
+        r'\bon track\b',
+        r'\bwaiting\b',
+        r'\bawaiting\b',
+        r'\bunderway\b',
+        r'\bongoing\b',
+        r'\bprogress\b',
+    ],
+    'na': [
+        r'\bn/?a\b',
+        r'\bnot applicable\b',
+        r'\bnot relevant\b',
+    ],
+}
+
+STRONG_COMPLETION_PATTERNS = [
+    r'\bissue(?:s)? resolved\b',
+    r'\bcleared\b',
+    r'\breleased\b',
+    r'\bdelivered\b',
+    r'\bcompleted\b',
+    r'\bfinalized\b',
+    r'\bapproved\b',
+    r'\bconfirmed\b',
+    r'\bready for release\b',
+    r'\bfully.*confirmed\b',
+    r'\bno further action\b',
+]
+
 
 def configure_utf8_console():
     """Configure console streams for UTF-8 output on Windows."""
@@ -108,9 +176,27 @@ class ProcessingState:
         """Update state for a specific shipment"""
         if shipment_key not in self.state:
             self.state[shipment_key] = {}
+
+        if 'file_status' in data:
+            self.add_status_history(shipment_key, data['file_status'])
+
         self.state[shipment_key].update(data)
         self.state[shipment_key]['last_processed'] = datetime.now().strftime(config.TIMESTAMP_FORMAT)
-    
+
+    def add_status_history(self, shipment_key: str, status: str):
+        """Record status transitions for a shipment"""
+        if shipment_key not in self.state:
+            self.state[shipment_key] = {}
+        if 'status_history' not in self.state[shipment_key]:
+            self.state[shipment_key]['status_history'] = []
+
+        history = self.state[shipment_key]['status_history']
+        if not history or history[-1].get('status') != status:
+            history.append({
+                'status': status,
+                'timestamp': datetime.now().strftime(config.TIMESTAMP_FORMAT)
+            })
+
     def add_processed_email(self, shipment_key: str, email_filename: str):
         """Add an email to the processed list for a shipment"""
         if shipment_key not in self.state:
@@ -315,6 +401,54 @@ class FileProcessor:
         
         return False
 
+    def _matches_status(self, text: str, status_type: str) -> bool:
+        """Check whether text matches a given status category"""
+        patterns = STATUS_PATTERNS.get(status_type, [])
+        for pattern in patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
+        return False
+
+    def determine_file_status(self, content: str, metadata: Dict, previous_status: Optional[str] = None) -> str:
+        """Determine the master file status from email content and metadata"""
+        text = ' '.join([
+            content,
+            metadata.get('subject', ''),
+            metadata.get('from', ''),
+        ]).lower()
+        if self._matches_status(text, 'action_required'):
+            return STATUS_LABELS['action_required']
+        if self._matches_status(text, 'completed'):
+            # If we are already red, only move off red with a strong completion signal
+            if previous_status == STATUS_LABELS['action_required']:
+                if self._matches_strong_completion(text):
+                    return STATUS_LABELS['completed']
+                return previous_status
+            return STATUS_LABELS['completed']
+        if self._matches_status(text, 'in_progress'):
+            if previous_status == STATUS_LABELS['action_required']:
+                return previous_status
+            return STATUS_LABELS['in_progress']
+        if self._matches_status(text, 'na'):
+            if previous_status == STATUS_LABELS['action_required']:
+                return previous_status
+            return STATUS_LABELS['na']
+        return previous_status or STATUS_LABELS['in_progress']
+
+    def _matches_strong_completion(self, text: str) -> bool:
+        """Check whether text contains a strong completion confirmation phrase"""
+        for pattern in STRONG_COMPLETION_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE):
+                return True
+        return False
+
+    def _extract_status_from_master(self, content: str) -> str:
+        """Extract the existing status line from an existing master file"""
+        match = re.search(r'\*\*File Status:\*\*\s*(.+)', content)
+        if match:
+            return match.group(1).strip()
+        return STATUS_LABELS['in_progress']
+
     def _extract_references(self, content: str, file_path: str) -> Tuple[List[str], List[str]]:
         """Extract references from content with filename fallback"""
         bartrac_refs, fml_refs = self.extractor.extract_references(content)
@@ -424,7 +558,7 @@ class FileProcessor:
             self._organize_file(file_path, shipment, result['file'])
             
             # Update or create master file
-            self._update_master_file(shipment, content, result['file'])
+            self._update_master_file(shipment, content, result['file'], shipment_key)
             
             # Update state
             self.state.add_processed_email(shipment_key, result['file'])
@@ -467,7 +601,7 @@ class FileProcessor:
         shutil.move(source_path, target_path)
         self.logger.success(f"Organized: {filename} → {target_folder}")
     
-    def _update_master_file(self, shipment: Dict, email_content: str, email_filename: str):
+    def _update_master_file(self, shipment: Dict, email_content: str, email_filename: str, shipment_key: str):
         """Create or update master file for shipment"""
         bartrac_ref = shipment['bartrac_ref']
         
@@ -482,7 +616,6 @@ class FileProcessor:
             return
         
         master_path = os.path.join(target_folder, master_filename)
-        shipment_key = f"{shipment['bartrac_ref']}_{shipment['fml_ref']}"
         
         # Extract metadata from email
         metadata = self.extractor.extract_email_metadata(email_content)
@@ -497,12 +630,12 @@ class FileProcessor:
                 })
             
             # Append to existing master file
-            self._append_to_master(master_path, metadata, email_filename)
+            self._append_to_master(master_path, metadata, email_filename, shipment_key, email_content)
         else:
             # Create new master file from template
-            self._create_master_file(master_path, shipment, metadata, email_filename)
-    
-    def _create_master_file(self, master_path: str, shipment: Dict, metadata: Dict, email_filename: str):
+            self._create_master_file(master_path, shipment, metadata, email_filename, shipment_key, email_content)
+
+    def _create_master_file(self, master_path: str, shipment: Dict, metadata: Dict, email_filename: str, shipment_key: str, email_content: str):
         """Create a new master file from template"""
         template_path = config.TEMPLATE_PATH
         
@@ -514,6 +647,9 @@ class FileProcessor:
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
+        # Determine file status
+        file_status = self.determine_file_status(email_content, metadata, None)
+
         # Prepare replacements
         replacements = {
             '{{file_ref}}': shipment['fml_ref'],
@@ -532,13 +668,14 @@ class FileProcessor:
             '{{client_po}}': '',
             '{{quotation_nr}}': '',
             '{{generated_date}}': datetime.now().strftime(config.DATE_FORMAT),
+            '{{file_status}}': file_status,
         }
         
         # Replace placeholders
         content = template_content
         for placeholder, value in replacements.items():
             content = content.replace(placeholder, value)
-        
+
         # Add first correspondence entry
         correspondence_row = f"| {metadata.get('date', 'N/A')} | {metadata.get('from', 'N/A')} | {metadata.get('subject', 'N/A')} | {email_filename} |"
         content = content.replace('{{correspondence_rows}}', correspondence_row)
@@ -548,18 +685,21 @@ class FileProcessor:
         with open(master_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        # Update state with file hash
-        shipment_key = f"{shipment['bartrac_ref']}_{shipment['fml_ref']}"
+        # Update state with file hash and status
         self.state.update_shipment_state(shipment_key, {
-            'file_hash': self.calculate_file_hash(master_path)
+            'file_hash': self.calculate_file_hash(master_path),
+            'file_status': file_status
         })
         
         self.logger.success(f"Created master file: {os.path.basename(master_path)}")
     
-    def _append_to_master(self, master_path: str, metadata: Dict, email_filename: str):
+    def _append_to_master(self, master_path: str, metadata: Dict, email_filename: str, shipment_key: str, email_content: str):
         """Append new correspondence to existing master file"""
         with open(master_path, 'r', encoding='utf-8') as f:
             content = f.read()
+        
+        current_status = self._extract_status_from_master(content)
+        new_status = self.determine_file_status(email_content, metadata, current_status)
         
         # Find correspondence log section and append
         correspondence_row = f"| {metadata.get('date', 'N/A')} | {metadata.get('from', 'N/A')} | {metadata.get('subject', 'N/A')} | {email_filename} |"
@@ -584,9 +724,23 @@ class FileProcessor:
             f'*Generated on: {datetime.now().strftime(config.DATE_FORMAT)}*',
             content
         )
-        
+
+        # Update file status line if necessary
+        if current_status != new_status:
+            content = re.sub(
+                r'(\*\*File Status:\*\*\s*).+',
+                rf'\1{new_status}',
+                content
+            )
+
         with open(master_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        
+        # Update state with file hash and status
+        self.state.update_shipment_state(shipment_key, {
+            'file_hash': self.calculate_file_hash(master_path),
+            'file_status': new_status
+        })
         
         self.logger.info(f"Updated master file: {os.path.basename(master_path)}")
 
@@ -747,7 +901,12 @@ def run_status(args):
         if shipment_state:
             emails_count = len(shipment_state.get('emails_processed', []))
             last_processed = shipment_state.get('last_processed', 'Never')
-            logger.info(f"{shipment['bartrac_ref']} | {shipment['fml_ref']} | Emails: {emails_count} | Last: {last_processed}")
+            file_status = shipment_state.get('file_status', 'Unknown')
+            history = shipment_state.get('status_history', [])
+            history_summary = ''
+            if history:
+                history_summary = ' | History: ' + ' -> '.join([entry['status'] for entry in history[-3:]])
+            logger.info(f"{shipment['bartrac_ref']} | {shipment['fml_ref']} | Status: {file_status} | Emails: {emails_count} | Last: {last_processed}{history_summary}")
         else:
             logger.info(f"{shipment['bartrac_ref']} | {shipment['fml_ref']} | Not processed")
     

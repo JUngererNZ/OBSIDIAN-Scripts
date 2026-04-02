@@ -90,5 +90,5 @@
 
 ---
 
-**File Status:** 🟡 In Progress
+**File Status:** {{file_status}}
 *Generated on: {{generated_date}}*

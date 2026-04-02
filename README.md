@@ -114,3 +114,6 @@ OBSIDIAN-Scripts/
 ├── MASTER-SHIPPING-FILE-LIST.csv      (Active shipments)
 └── MASTER-SHIPPING-FILE-CARGO-TO-ARRIVE-AT-DBN-PORT.csv (Planned shipments)
 ```
+
+Give this a read:
+https://github.com/JUngererNZ/OBSIDIAN-Scripts/edit/master/README3.md
